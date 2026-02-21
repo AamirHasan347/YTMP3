@@ -1,19 +1,21 @@
 import React, { useState, useEffect, useRef } from "react";
 
+// Use Vite's environment variable – set VITE_API_BASE_URL in .env or Vercel
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:3001";
+
 function App() {
   const [url, setUrl] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [progress, setProgress] = useState(0); // overall % (0–100)
+  const [progress, setProgress] = useState(0);
   const [message, setMessage] = useState("");
-  const [currentSong, setCurrentSong] = useState(""); // title being processed
+  const [currentSong, setCurrentSong] = useState("");
 
-  // Generate a unique session ID once when the component mounts
   const [sessionId, setSessionId] = useState("");
   useEffect(() => {
     setSessionId(crypto.randomUUID());
   }, []);
 
-  // Ref to hold the EventSource so we can close it properly
   const eventSourceRef = useRef(null);
 
   const handleProcess = async (e) => {
@@ -28,39 +30,41 @@ function App() {
     setCurrentSong("");
     setMessage("Connecting...");
 
-    // 1. Open SSE connection with the session ID
     const eventSource = new EventSource(
-      `http://localhost:3001/api/progress?sessionId=${sessionId}`,
+      `${API_BASE_URL}/api/progress?sessionId=${sessionId}`,
     );
     eventSourceRef.current = eventSource;
 
-    // Store total songs count for progress calculation
     let totalSongs = 0;
 
-    // Listen for the playlist info event
     eventSource.addEventListener("playlistInfo", (e) => {
       const data = JSON.parse(e.data);
       totalSongs = data.total;
       setMessage(`Found ${totalSongs} songs. Starting download...`);
     });
 
-    // When a new song starts
     eventSource.addEventListener("songStart", (e) => {
       const data = JSON.parse(e.data);
       setCurrentSong(data.title);
       setMessage(`Downloading (${data.current}/${data.total}): ${data.title}`);
     });
 
-    // Update progress based on current song's percentage
     eventSource.addEventListener("songProgress", (e) => {
-      const data = JSON.parse(e.data);
-      // overall progress = ( (current-1) + (data.percent/100) ) / total * 100
-      const overall =
-        ((data.current - 1 + data.percent / 100) / data.total) * 100;
-      setProgress(Math.min(overall, 100));
+      try {
+        const data = JSON.parse(e.data);
+        const overall =
+          ((data.current - 1 + data.percent / 100) / data.total) * 100;
+        setProgress(Math.min(overall, 100));
+      } catch (err) {
+        console.warn("Invalid progress JSON:", e.data);
+      }
     });
 
-    // If an error occurs during processing
+    eventSource.addEventListener("songError", (e) => {
+      const data = JSON.parse(e.data);
+      setMessage(`Skipped: ${data.title} – ${data.error}`);
+    });
+
     eventSource.addEventListener("error", (e) => {
       const data = JSON.parse(e.data);
       setMessage(`Error: ${data.message}`);
@@ -68,22 +72,22 @@ function App() {
       eventSource.close();
     });
 
-    // When everything is done (ZIP is ready)
     eventSource.addEventListener("complete", () => {
       setMessage("Download complete!");
       setProgress(100);
-      // Don't close yet – the ZIP will be delivered via the POST response
     });
 
-    // Fallback for any other messages (like connected)
     eventSource.onmessage = (e) => {
-      const data = JSON.parse(e.data);
-      if (data.message) setMessage(data.message);
+      try {
+        const data = JSON.parse(e.data);
+        if (data.message) setMessage(data.message);
+      } catch {
+        // ignore non‑JSON messages
+      }
     };
 
-    // 2. Send the POST request to start the actual download
     try {
-      const response = await fetch("http://localhost:3001/api/process-url", {
+      const response = await fetch(`${API_BASE_URL}/api/process-url`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url, sessionId }),
@@ -94,7 +98,6 @@ function App() {
         throw new Error(errorData.error || "Failed to process URL");
       }
 
-      // Get the ZIP blob and trigger download
       const blob = await response.blob();
       const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -109,21 +112,17 @@ function App() {
     } catch (error) {
       console.error("Error:", error);
       setMessage(`An error occurred: ${error.message}`);
-      // Close SSE on error
       if (eventSourceRef.current) eventSourceRef.current.close();
     } finally {
       setIsLoading(false);
-      // Close SSE if still open
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
-      // Reset progress after a few seconds
       setTimeout(() => setProgress(0), 3000);
     }
   };
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (eventSourceRef.current) {
@@ -162,7 +161,6 @@ function App() {
           </button>
         </form>
 
-        {/* Progress bar and current song info */}
         {isLoading && (
           <div className="mt-6">
             <div className="flex justify-between text-sm font-medium text-gray-700 mb-1">
@@ -178,7 +176,6 @@ function App() {
           </div>
         )}
 
-        {/* Status message */}
         {message && (
           <p className="mt-4 text-center text-sm font-medium text-gray-700">
             {message}

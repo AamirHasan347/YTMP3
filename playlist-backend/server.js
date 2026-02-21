@@ -9,7 +9,28 @@ const os = require("os");
 const path = require("path");
 
 const app = express();
-app.use(cors());
+
+// Configure CORS to allow requests from your frontend origins
+const allowedOrigins = [
+  "http://localhost:5173", // Vite default
+  "http://localhost:3000", // alternative
+  // Add your Vercel frontend URL after deployment, e.g.:
+  // "https://your-frontend.vercel.app"
+];
+
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps or curl)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      } else {
+        return callback(new Error("Not allowed by CORS"));
+      }
+    },
+  }),
+);
 app.use(express.json());
 
 // Store active SSE connections: sessionId -> express.Response
@@ -87,7 +108,7 @@ app.post("/api/process-url", async (req, res) => {
     res.attachment("songs.zip");
     archive.pipe(res);
 
-    const tempFiles = []; // track temp files for cleanup
+    const tempFiles = [];
 
     for (let i = 0; i < totalSongs; i++) {
       const song = playlistInfo[i];
@@ -103,7 +124,6 @@ app.post("/api/process-url", async (req, res) => {
       });
 
       try {
-        // Download and convert to temp file
         await downloadSongToFile(song.id, tempFilePath, (progress) => {
           sendEvent(sessionId, "songProgress", {
             current: i + 1,
@@ -113,7 +133,6 @@ app.post("/api/process-url", async (req, res) => {
           });
         });
 
-        // Success – add to archive
         archive.file(tempFilePath, { name: safeName });
         tempFiles.push(tempFilePath);
         console.log(`  ✅ Added: ${song.title}`);
@@ -125,7 +144,6 @@ app.post("/api/process-url", async (req, res) => {
           title: song.title,
           error: songError.message,
         });
-        // Delete temp file if it exists
         try {
           if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
         } catch (cleanupErr) {
@@ -133,7 +151,6 @@ app.post("/api/process-url", async (req, res) => {
         }
       }
 
-      // Delay between songs to avoid rate limiting
       console.log(`  Waiting 1.5s before next song...`);
       await new Promise((resolve) => setTimeout(resolve, 1500));
     }
@@ -142,7 +159,6 @@ app.post("/api/process-url", async (req, res) => {
     await archive.finalize();
     sendEvent(sessionId, "complete", { message: "Download finished" });
 
-    // Clean up all temp files
     for (const file of tempFiles) {
       try {
         if (fs.existsSync(file)) fs.unlinkSync(file);
@@ -173,7 +189,6 @@ function extractPlaylistId(url) {
   }
 }
 
-// Fetch playlist metadata
 function getPlaylistInfo(playlistId) {
   return new Promise((resolve, reject) => {
     const playlistUrl = `https://music.youtube.com/playlist?list=${playlistId}`;
@@ -216,10 +231,9 @@ function getPlaylistInfo(playlistId) {
   });
 }
 
-// Download a single song to a temporary file with progress
 function downloadSongToFile(videoId, outputPath, progressCallback) {
   return new Promise((resolve, reject) => {
-    let settled = false; // prevent multiple reject/resolve
+    let settled = false;
     const videoUrl = `https://music.youtube.com/watch?v=${videoId}`;
 
     const ytproc = spawn("yt-dlp", ["-f", "bestaudio", "-o", "-", videoUrl]);
@@ -230,7 +244,7 @@ function downloadSongToFile(videoId, outputPath, progressCallback) {
       "mp3",
       "-ab",
       "192k",
-      "-y", // overwrite output file
+      "-y",
       outputPath,
       "-loglevel",
       "error",
@@ -274,7 +288,6 @@ function downloadSongToFile(videoId, outputPath, progressCallback) {
       if (code !== 0 && !settled) {
         handleError(new Error(`yt-dlp exited with code ${code}: ${ytError}`));
       }
-      // If yt-dlp closed successfully, we wait for ffmpeg.
     });
 
     ffmpeg.on("close", (code) => {
