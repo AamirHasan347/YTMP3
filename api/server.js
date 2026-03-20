@@ -10,8 +10,18 @@ const path = require("path");
 
 const app = express();
 
-// Configure CORS to allow requests from your frontend origins
-// Configure CORS with detailed logging
+// Parse JSON bodies
+app.use(express.json());
+
+// ---------- Log every incoming request ----------
+app.use((req, res, next) => {
+  console.log(
+    `[REQUEST] ${req.method} ${req.url} from origin: ${req.headers.origin || "none"}`,
+  );
+  next();
+});
+
+// ---------- CORS configuration with detailed logging ----------
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
@@ -21,7 +31,6 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: function (origin, callback) {
-      // Log the incoming origin for debugging
       console.log(`[CORS] Incoming origin: ${origin}`);
       console.log(`[CORS] Allowed origins: ${JSON.stringify(allowedOrigins)}`);
 
@@ -39,13 +48,15 @@ app.use(
         return callback(new Error("Not allowed by CORS"));
       }
     },
+    credentials: true, // if you ever need cookies/auth
+    allowedHeaders: ["Content-Type", "Authorization"],
   }),
 );
-app.use(express.json());
 
 // Store active SSE connections: sessionId -> express.Response
 const clients = new Map();
 
+// Global error handlers
 process.on("unhandledRejection", (reason, promise) => {
   console.error("Unhandled Rejection at:", promise, "reason:", reason);
 });
@@ -327,4 +338,5 @@ app.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
 });
 
+// For Render to detect the app
 module.exports = app;
