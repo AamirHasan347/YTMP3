@@ -11,20 +11,31 @@ const path = require("path");
 const app = express();
 
 // Configure CORS to allow requests from your frontend origins
+// Configure CORS with detailed logging
 const allowedOrigins = [
-  "http://localhost:5173", // Vite default
-  "http://localhost:3000", // alternative
-  "https://ytmp3-five.vercel.app/",
+  "http://localhost:5173",
+  "http://localhost:3000",
+  "https://ytmp3-five.vercel.app",
 ];
 
 app.use(
   cors({
     origin: function (origin, callback) {
+      // Log the incoming origin for debugging
+      console.log(`[CORS] Incoming origin: ${origin}`);
+      console.log(`[CORS] Allowed origins: ${JSON.stringify(allowedOrigins)}`);
+
       // Allow requests with no origin (like mobile apps or curl)
-      if (!origin) return callback(null, true);
+      if (!origin) {
+        console.log("[CORS] No origin – allowing");
+        return callback(null, true);
+      }
+
       if (allowedOrigins.includes(origin)) {
+        console.log(`[CORS] Origin ${origin} is allowed`);
         return callback(null, true);
       } else {
+        console.log(`[CORS] Origin ${origin} is NOT allowed`);
         return callback(new Error("Not allowed by CORS"));
       }
     },
