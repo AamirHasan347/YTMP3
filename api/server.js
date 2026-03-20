@@ -15,7 +15,7 @@ const allowedOrigins = [
   "http://localhost:5173", // Vite default
   "http://localhost:3000", // alternative
   // Add your Vercel frontend URL after deployment, e.g.:
-  // "https://your-frontend.vercel.app"
+  "https://ytmp3-five.vercel.app/",
 ];
 
 app.use(
