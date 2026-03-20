@@ -1,16 +1,39 @@
 const express = require("express");
 const cors = require("cors");
 const archiver = require("archiver");
-const { spawn } = require("child_process");
+const { spawn, execSync } = require("child_process");
 const { URL } = require("url");
 const { v4: uuidv4 } = require("uuid");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
-const app = express();
+// ---------- Check for required dependencies ----------
+function checkDependencies() {
+  try {
+    execSync("yt-dlp --version", { stdio: "ignore" });
+    console.log("✅ yt-dlp is installed.");
+  } catch (e) {
+    console.error("❌ yt-dlp is not installed or not in PATH.");
+    console.error(
+      "   Install it with: curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp && chmod a+rx /usr/local/bin/yt-dlp",
+    );
+    process.exit(1);
+  }
+  try {
+    execSync("ffmpeg -version", { stdio: "ignore" });
+    console.log("✅ ffmpeg is installed.");
+  } catch (e) {
+    console.error("❌ ffmpeg is not installed or not in PATH.");
+    console.error(
+      "   Install it with: apt-get update && apt-get install -y ffmpeg",
+    );
+    process.exit(1);
+  }
+}
+checkDependencies();
 
-// Parse JSON bodies
+const app = express();
 app.use(express.json());
 
 // ---------- Log every incoming request ----------
@@ -34,7 +57,6 @@ app.use(
       console.log(`[CORS] Incoming origin: ${origin}`);
       console.log(`[CORS] Allowed origins: ${JSON.stringify(allowedOrigins)}`);
 
-      // Allow requests with no origin (like mobile apps or curl)
       if (!origin) {
         console.log("[CORS] No origin – allowing");
         return callback(null, true);
@@ -48,7 +70,7 @@ app.use(
         return callback(new Error("Not allowed by CORS"));
       }
     },
-    credentials: true, // if you ever need cookies/auth
+    credentials: true,
     allowedHeaders: ["Content-Type", "Authorization"],
   }),
 );
@@ -338,5 +360,4 @@ app.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
 });
 
-// For Render to detect the app
 module.exports = app;
